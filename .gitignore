@@ -1,0 +1,7 @@
+.idea/
+cover.out
+*.exe
+*.test
+*.prof
+*.*~
+*.log
