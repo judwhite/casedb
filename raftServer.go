@@ -5,17 +5,47 @@ import (
 
 	"fmt"
 
+	"sync"
+	"time"
+
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/coreos/etcd/snap"
+	"github.com/coreos/etcd/wal/walpb"
 	log "github.com/judwhite/logrjack"
 	"github.com/pkg/errors"
 )
+
+type raftServer struct {
+	NodeID      uint64
+	Node        raft.Node
+	Ticker      *time.Ticker
+	raftStorage *raft.MemoryStorage
+
+	snapdir string
+	waldir  string
+
+	done chan struct{}
+	wg   sync.WaitGroup
+}
+
+func newRaftServer(id uint64) *raftServer {
+	return &raftServer{
+		NodeID:  id,
+		Ticker:  time.NewTicker(50 * time.Millisecond),
+		snapdir: "snapshots",
+		waldir:  "wal",
+		done:    make(chan struct{}),
+	}
+}
 
 func (s *raftServer) Start() error {
 	log.Info("starting raft server...")
 
 	storage := raft.NewMemoryStorage()
-	c := &raft.Config{ // was: Config{
+	s.raftStorage = storage
+
+	c := &raft.Config{
 		ID:              s.NodeID,
 		ElectionTick:    10,
 		HeartbeatTick:   1,
@@ -24,22 +54,46 @@ func (s *raftServer) Start() error {
 		MaxInflightMsgs: 256,
 	}
 
-	var peers []raft.Peer
-	for i := uint64(1); i <= 3; i++ {
-		if i != s.NodeID {
-			peers = append(peers, raft.Peer{ID: i})
-		}
-	}
-
 	if !exists(s.snapdir) {
 		if err := os.Mkdir(s.snapdir, 0750); err != nil {
 			return errors.Wrapf(err, "cannot create dir '%s' for snapshot", s.snapdir)
 		}
 	}
 
-	s.Node = raft.StartNode(c, peers)
-	s.raftStorage = storage
+	if !exists(s.waldir) {
+		if err := os.Mkdir(s.waldir, 0750); err != nil {
+			return errors.Wrapf(err, "cannot create dir '%s' for wal", s.waldir)
+		}
+	}
 
+	var snapshot *raftpb.Snapshot
+	ss := snap.New(s.snapdir)
+	snapshot, err := ss.Load()
+	if err != nil && err != snap.ErrNoSnapshot {
+		plog.Fatalf("ERR: %T %v", err, err)
+	}
+	if snapshot != nil {
+		// Restart cluster from a previous start
+		var walsnap walpb.Snapshot
+		walsnap.Index, walsnap.Term = snapshot.Metadata.Index, snapshot.Metadata.Term
+		_, _, _, state, entries := readWAL(s.waldir, walsnap)
+		storage.ApplySnapshot(*snapshot)
+		storage.SetHardState(state)
+		storage.Append(entries)
+		s.Node = raft.RestartNode(c)
+	} else {
+		// Start a new cluster
+		var peers []raft.Peer
+		for i := uint64(1); i <= 3; i++ {
+			if i != s.NodeID {
+				peers = append(peers, raft.Peer{ID: i})
+			}
+		}
+
+		s.Node = raft.StartNode(c, peers)
+	}
+
+	// Start Raft loop
 	s.wg.Add(1)
 	go s.raftLoop()
 
@@ -105,22 +159,30 @@ func saveToStorage(state raftpb.HardState, entries []raftpb.Entry, snapshot raft
 	e := log.NewEntry()
 	e.AddField("context", "raft")
 	e.Infof("saveToStorage state:%#v len(entries):%v len(snapshot):%v", state, len(entries), len(snapshot.Data))
+
+	// TODO (judwhite): finish implementation
 }
 
 func send(messages []raftpb.Message) {
 	e := log.NewEntry()
 	e.AddField("context", "raft")
 	e.Infof("send count:%v", len(messages))
+
+	// TODO (judwhite): finish implementation
 }
 
 func processSnapshot(snapshot raftpb.Snapshot) {
 	e := log.NewEntry()
 	e.AddField("context", "raft")
 	e.Infof("processSnapshot confstate:%v term:%v index:%v len(data)=%v", snapshot.Metadata.ConfState, snapshot.Metadata.Term, snapshot.Metadata.Index, len(snapshot.Data))
+
+	// TODO (judwhite): finish implementation
 }
 
 func process(entry raftpb.Entry) {
 	e := log.NewEntry()
 	e.AddField("context", "raft")
 	e.Infof("process type:%v term:%v index:%v len(data):%v", entry.Type, entry.Term, entry.Index, len(entry.Data))
+
+	// TODO (judwhite): finish implementation
 }
