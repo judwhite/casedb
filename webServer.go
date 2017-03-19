@@ -13,12 +13,12 @@ func (svr *webServer) Start() error {
 
 	r.NotFoundHandler = svr
 
-	r.HandleFunc("/ping", svr.Handle(svr.pingHandler))
-	r.HandleFunc("/stats", svr.Handle(svr.statsHandler))
+	r.HandleFunc("/ping", svr.Handle(handler("/api/v1/ping", svr.pingHandler)))
+	r.HandleFunc("/stats", svr.Handle(handler("/api/v1/stats", svr.statsHandler)))
 
 	apiv1 := r.PathPrefix("/api/v1").Subrouter()
-	apiv1.HandleFunc("/stats", svr.Handle(svr.statsHandler))
-	apiv1.HandleFunc("/ping", svr.Handle(svr.pingHandler))
+	apiv1.HandleFunc("/ping", svr.Handle(handler("/api/v1/ping", svr.pingHandler)))
+	apiv1.HandleFunc("/stats", svr.Handle(handler("/api/v1/stats", svr.statsHandler)))
 
 	attachProfiler(r)
 
@@ -36,6 +36,10 @@ func (svr *webServer) Start() error {
 	return nil
 }
 
+func handler(name string, h func(r *http.Request, requestLogger httplog.Entry) (httplog.Response, error)) httplog.Handler {
+	return httplog.Handler{Name: name, Func: h}
+}
+
 func (svr *webServer) Stop() {
 	log.Info("stopping web server...")
 	svr.Shutdown()
@@ -48,7 +52,7 @@ func (svr *webServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return httplog.Response{Body: "404 page not found", Status: http.StatusNotFound}, nil
 	}
 
-	handler := svr.Handle(f)
+	handler := svr.Handle(handler("notfound", f))
 	handler(w, r)
 }
 
