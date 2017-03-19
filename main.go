@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -20,18 +19,6 @@ type program struct {
 type webServer struct {
 	httplog.Server
 	raftServer *raftServer
-}
-
-type raftServer struct {
-	NodeID      uint64
-	Node        raft.Node
-	Ticker      *time.Ticker
-	raftStorage *raft.MemoryStorage
-
-	snapdir string
-
-	done chan struct{}
-	wg   sync.WaitGroup
 }
 
 var settings appSettings
@@ -56,12 +43,7 @@ func main() {
 				ShutdownTimeout: 2 * time.Second,
 				NewLogEntry:     func() httplog.Entry { return log.NewEntry() },
 			},
-			raftServer: &raftServer{
-				NodeID:  *id,
-				Ticker:  time.NewTicker(50 * time.Millisecond),
-				snapdir: "snapshots",
-				done:    make(chan struct{}),
-			},
+			raftServer: newRaftServer(*id),
 		},
 	}
 	if err := svc.Run(&prg); err != nil {
