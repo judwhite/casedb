@@ -5,7 +5,6 @@ import (
 
 	"fmt"
 
-	"github.com/coreos/etcd/pkg/fileutil"
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	log "github.com/judwhite/logrjack"
@@ -32,7 +31,7 @@ func (s *raftServer) Start() error {
 		}
 	}
 
-	if !fileutil.Exist(s.snapdir) {
+	if !exists(s.snapdir) {
 		if err := os.Mkdir(s.snapdir, 0750); err != nil {
 			return errors.Wrapf(err, "cannot create dir '%s' for snapshot", s.snapdir)
 		}
@@ -45,6 +44,11 @@ func (s *raftServer) Start() error {
 	go s.raftLoop()
 
 	return nil
+}
+
+func exists(name string) bool {
+	_, err := os.Stat(name)
+	return err == nil
 }
 
 func (s *raftServer) Stop() {
